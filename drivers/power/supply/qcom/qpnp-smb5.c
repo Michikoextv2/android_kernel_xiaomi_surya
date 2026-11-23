@@ -3949,16 +3949,7 @@ static void thermal_fb_notifier_resume_work(struct work_struct *work)
 	struct smb_charger *chg = container_of(work, struct smb_charger, fb_notify_work);
 	LctThermal = 1;
 
-	if ((lct_backlight_off) && (LctIsInCall == 0)) {
-		if (lct_therm_lvl_reserved.intval > LCT_THERM_LCDOFF_LEVEL)
-			smblib_set_prop_system_temp_level(chg,&lct_therm_lcdoff_level);
-		else
-			smblib_set_prop_system_temp_level(chg,&lct_therm_lvl_reserved);//from thermal-level
-	} else if (LctIsInCall == 1) {
-		smblib_set_prop_system_temp_level(chg,&lct_therm_call_level);//800mA
-	} else {
-		smblib_set_prop_system_temp_level(chg,&lct_therm_lvl_reserved);//from thermal-levle
-	}
+	smblib_set_prop_system_temp_level(chg, &lct_therm_lvl_reserved);
 
 	LctThermal = 0;
 }
