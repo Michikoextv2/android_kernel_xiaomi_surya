@@ -2931,7 +2931,30 @@ __always_inline void reweight_task(struct task_struct *p, int prio)
 #ifdef CONFIG_SCHED_BORE
 void reweight_task_bore(struct task_struct *p, int prio)
 {
+#ifdef CONFIG_FAIR_GROUP_SCHED
 	reweight_task(p, prio);
+#else
+	/*
+	 * 4.14's reweight_task() is a no-op without FAIR_GROUP_SCHED.
+	 * BORE still needs the task weight change, so do the task-only
+	 * part of reweight_entity() directly.
+	 */
+	struct sched_entity *se = &p->se;
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+	unsigned long weight = scale_load(sched_prio_to_weight[prio]);
+
+	if (se->on_rq) {
+		if (cfs_rq->curr == se)
+			update_curr(cfs_rq);
+		account_entity_dequeue(cfs_rq, se);
+	}
+
+	update_load_set(&se->load, weight);
+	se->load.inv_weight = sched_prio_to_wmult[prio];
+
+	if (se->on_rq)
+		account_entity_enqueue(cfs_rq, se);
+#endif
 }
 #endif
 
