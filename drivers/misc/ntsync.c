@@ -10,7 +10,9 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/hrtimer.h>
+#include <linux/compat.h>
 #include <linux/ktime.h>
+#include <linux/lockdep.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -23,6 +25,34 @@
 #include <uapi/linux/ntsync.h>
 
 #define NTSYNC_NAME	"ntsync"
+
+/*
+ * 4.14 lockdep lacks lockdep_assert() and LOCK_STATE_NOT_HELD, which NTSync
+ * inherited from newer kernels. Provide harmless fallbacks.
+ */
+#ifndef LOCK_STATE_NOT_HELD
+#define LOCK_STATE_NOT_HELD	0
+#endif
+
+#ifndef lockdep_assert
+#define lockdep_assert(expr)	WARN_ON_ONCE(debug_locks && !(expr))
+#endif
+
+#ifndef lockdep_is_held
+#define lockdep_is_held(lock)	(1)
+#endif
+
+#ifdef CONFIG_COMPAT
+/* 4.14 has no compat_ptr_ioctl(); this is the same pointer conversion. */
+static long ntsync_compat_ioctl(struct file *file, unsigned int cmd,
+				unsigned long arg)
+{
+	return file->f_op->unlocked_ioctl(file, cmd,
+					  (unsigned long)compat_ptr(arg));
+}
+#else
+#define ntsync_compat_ioctl	NULL
+#endif
 
 enum ntsync_type {
 	NTSYNC_TYPE_SEM,
@@ -698,7 +728,7 @@ static const struct file_operations ntsync_obj_fops = {
 	.owner		= THIS_MODULE,
 	.release	= ntsync_obj_release,
 	.unlocked_ioctl	= ntsync_obj_ioctl,
-	.compat_ioctl	= compat_ptr_ioctl,
+	.compat_ioctl	= ntsync_compat_ioctl,
 };
 
 static struct ntsync_obj *ntsync_alloc_obj(struct ntsync_device *dev,
@@ -1202,7 +1232,7 @@ static const struct file_operations ntsync_fops = {
 	.open		= ntsync_char_open,
 	.release	= ntsync_char_release,
 	.unlocked_ioctl	= ntsync_char_ioctl,
-	.compat_ioctl	= compat_ptr_ioctl,
+	.compat_ioctl	= ntsync_compat_ioctl,
 };
 
 static struct miscdevice ntsync_misc = {
